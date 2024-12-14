@@ -3,7 +3,6 @@
 # This unit allows to run the application via GPT APIs or Claude APIs
 #
 from typing import List
-import time
 from enum import Enum
 # File key.ph contains the OpenAI key and is needed to execute the test.
 # In case the import fails, shows instruction for creation of the file.
@@ -49,13 +48,19 @@ class LLM():
     - For GEMINI, the key.py file should contain GeminiAIKey.
     """
     model: Models = None   # LLM to use, no default
+    exact_model: str = ""
 
-    def __init__(self,_model: Models, _role: str = "") -> None:
+    def __init__(self,_model: Models, _role: str = "", _exact_model: str = "") -> None:
         """
         Initializes the LLM instance with the specified model.
 
         Parameters:
         - model (Models): The LLM model to use (GPT, CLAUDE, or GEMINI).
+        - exact_model: exact definition of the model to use, e.g. gpt-4o-mini.
+          If omitted, uses defaults:
+            gpt-4o-mini for GPT
+            claude-3-5-sonnet-20241022 for CLAUDE
+            gemini-1.0-pro for GEMINI
         """
         super().__init__()
         self.roleInitMessage = _role
@@ -76,10 +81,22 @@ class LLM():
             )
         # Dependencies are loaded, create the client
         if (_model == Models.GPT):
+            if (_exact_model != ""):
+                self.exact_model = _exact_model
+            else:
+                self.exact_model = "gpt-4o-mini"
             self.LLMClient = OpenAI(api_key = key.GPTAIKey())
         elif (_model == Models.CLAUDE):
+            if (_exact_model != ""):
+                self.exact_model = _exact_model
+            else:
+                self.exact_model="claude-3-5-sonnet-20241022"
             self.LLMClient = anthropic.Client(api_key= key.ClaudeAIKey)
         elif (_model == Models.GEMINI):
+            if (_exact_model != ""):
+                self.exact_model = _exact_model
+            else:
+                self.exact_model="gemini-1.0-pro"
             google.generativeai.configure(api_key=key.GeminiAIKey)
             # Set up the model
             generation_config = {
@@ -107,7 +124,7 @@ class LLM():
             },
             ]
             self.LLMClient = google.generativeai.GenerativeModel(
-                model_name="gemini-1.0-pro",
+                model_name=self.exact_model,
                 generation_config=generation_config,
                 safety_settings=safety_settings
             )
@@ -166,25 +183,25 @@ class LLM():
         if (self.model == Models.GPT):
             internalQueue.append({"role":"user","content":userMessage})
             response = self.LLMClient.chat.completions.create(
-            model="gpt-4",
+            model=self.exact_model,
             messages= internalQueue,
-            temperature=1.065,
-            max_tokens=192,
-            top_p=1,
-            frequency_penalty=0.05,
-            presence_penalty=0
+#            temperature=1.065,
+            max_tokens=256,
+#            top_p=1,
+#            frequency_penalty=0.05,
+#            presence_penalty=0
             )
             LLMmessage = response.choices[0].message.content
             internalQueue.append({"role":"assistant","content":LLMmessage})
         elif (self.model == Models.CLAUDE):
             internalQueue.append({"role":"user","content":userMessage})
             response = self.LLMClient.messages.create(
-            model="claude-3-sonnet-20240229",
+            model=self.exact_model,
             system=self.roleInitMessage, # Claude has a specific parameter for role definition
             messages= internalQueue,
-            temperature=0.065,
-            max_tokens=192,
-            top_p=1,
+#            temperature=0.065,
+            max_tokens=256,
+#            top_p=1,
             )
             LLMmessage = response.content[0].text
             internalQueue.append({"role":"assistant","content":LLMmessage})
