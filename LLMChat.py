@@ -103,7 +103,7 @@ class LLM():
             "temperature": 0.9,
             "top_p": 1,
             "top_k": 0,
-            "max_output_tokens": 256,
+            "max_output_tokens": 512,
             }
             safety_settings = [
             {
@@ -141,17 +141,16 @@ class LLM():
         """
         self.roleInitMessage = role
 
-    def LLMCompletion(self, userMessage: str,queue: List[str], append: bool = True) :
+    def LLMCompletion(self, userMessage: str,queue: List[str] = None) :
         """
         Call LLM in completion mode.
 
         Parameters:
-        - userMessage (str): Message to send to LLM.
-        - queue (List[str]): List containing the conversation with LLM.
-          If parameter <append> is True, then user message and answer are added to
-          the queue. Otherwise, the queue remains unchanged.
-        - append (bool): True (default) if the pair user message/LLM answer must be
-          added to <queue>. False otherwise.
+        -   userMessage (str): Message to send to LLM.
+        -   queue (List[str]): List containing the user/LLM conversation.
+            Passing the same queue at each iteration allows to continue the
+            conversation. The parameter is optional. If omitted, the conversation
+            will start from scratch every time.
 
         Returns:
         - str: LLM's response to the user's message.
@@ -169,14 +168,19 @@ class LLM():
         elif (self.model == Models.GEMINI):
             self.LLMClient.api_key = key.GeminiAIKey
 
-        if (append):
+        # If a queue is passed, use it. Otherwise, use the internal queue.
+        # In case the internal queue is used, the conversation will be lost
+        # at each run. Otherwise, both user and LLM messages will be appended.
+        if (queue != None):
             internalQueue = queue
-        else:
-            internalQueue = queue.copy()
 
         # If LLM is GPT, then add the system role as first item in the list.
         # Claude has a different method for setting it.
-        if ( (len(internalQueue) == 0) and (self.model == Models.GPT) ):
+        if ( (
+            len(internalQueue) == 0) and
+            (self.model == Models.GPT) and
+            (self.roleInitMessage != "")
+        ):
             internalQueue.append({"role": "system", "content":self.roleInitMessage})
 
         # Now invoke the completion task with the new user message
@@ -186,13 +190,15 @@ class LLM():
             model=self.exact_model,
             messages= internalQueue,
 #            temperature=1.065,
-            max_tokens=256,
+            max_tokens=512,
 #            top_p=1,
 #            frequency_penalty=0.05,
 #            presence_penalty=0
             )
             LLMmessage = response.choices[0].message.content
-            internalQueue.append({"role":"assistant","content":LLMmessage})
+            if (queue != None):
+                queue.append({"role":"assistant","content":LLMmessage})
+
         elif (self.model == Models.CLAUDE):
             internalQueue.append({"role":"user","content":userMessage})
             response = self.LLMClient.messages.create(
@@ -200,11 +206,12 @@ class LLM():
             system=self.roleInitMessage, # Claude has a specific parameter for role definition
             messages= internalQueue,
 #            temperature=0.065,
-            max_tokens=256,
+            max_tokens=512,
 #            top_p=1,
             )
             LLMmessage = response.content[0].text
             internalQueue.append({"role":"assistant","content":LLMmessage})
+
         elif (self.model == Models.GEMINI):
             internalQueue.append({"role":"user","parts":[userMessage]})
             convo = self.LLMClient.start_chat(history=internalQueue)
